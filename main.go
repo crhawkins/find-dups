@@ -10,7 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"sync"
+	"time"
 )
 
 type FileNode struct {
@@ -81,6 +83,7 @@ func FindDupes(path string) map[string][]string {
 	var wg sync.WaitGroup
 
 	numWorkers := runtime.NumCPU()
+	//numWorkers = 1
 	fmt.Printf("🔁 Using %v threads\n\n", numWorkers)
 	wg.Add(numWorkers)
 	for i := 0; i < numWorkers; i++ {
@@ -103,6 +106,36 @@ func FindDupes(path string) map[string][]string {
 }
 
 func main() {
+	// Setup profiling
+	cpuProfile, err := os.Create("cpu.prof")
+	if err != nil {
+		log.Fatal("could not create CPU profile: ", err)
+	}
+	defer cpuProfile.Close()
+
+	if err := pprof.StartCPUProfile(cpuProfile); err != nil {
+		log.Fatal("could not start CPU profile: ", err)
+	}
+	defer pprof.StopCPUProfile()
+
+	// Optional: Track memory
+	memProfile := "mem.prof"
+	defer func() {
+		f, err := os.Create(memProfile)
+		if err != nil {
+			log.Fatal("could not create memory profile: ", err)
+		}
+		defer f.Close()
+		runtime.GC() // run GC before taking heap profile
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			log.Fatal("could not write memory profile: ", err)
+		}
+	}()
+
+	// Timing
+	start := time.Now()
+
+	// Main logic
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: program <path>")
 		return
@@ -120,4 +153,5 @@ func main() {
 		}
 	}
 
+	fmt.Printf("✅ Done in %s\n", time.Since(start))
 }
